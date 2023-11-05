@@ -3,6 +3,8 @@ from __init__ import CURSOR, CONN
 
 class Department:
 
+    all = {};
+
     def __init__(self, name, location, id=None):
         self.id = id
         self.name = name
@@ -45,6 +47,7 @@ class Department:
         CONN.commit()
 
         self.id = CURSOR.lastrowid
+        type(self).all[self.id] = self;
 
     @classmethod
     def create(cls, name, location):
@@ -52,6 +55,36 @@ class Department:
         department = cls(name, location)
         department.save()
         return department
+    
+    @classmethod
+    def instance_from_db(cls, row):
+        # Check the dictionary for an existing instance using the row's primary key
+        department = cls.all.get(row[0]);
+        if department:
+            # ensure attributes match row values in case local object was modified
+            department.name = row[1];
+            department.location = row[2];
+        else:
+            # not in dictionary, create new instance and add to dictionary
+            department = cls(row[1], row[2]);
+            department.id = row[0];
+            cls.all[department.id] = department;
+        return department;
+
+    @classmethod
+    def get_all(cls):
+        rows = CURSOR.execute("SELECT * FROM departments").fetchall();
+        return [cls.instance_from_db(row) for row in rows];
+
+    @classmethod
+    def find_by_id(cls, id):
+        row = CURSOR.execute("SELECT * FROM departments WHERE id = ?", (id,)).fetchone();
+        return cls.instance_from_db(row) if row else None;
+    
+    @classmethod
+    def find_by_name(cls, name):
+        row = CURSOR.execute("SELECT * FROM departments WHERE name is ?", (name,)).fetchone()
+        return cls.instance_from_db(row) if row else None;
 
     def update(self):
         """Update the table row corresponding to the current Department instance."""
@@ -70,5 +103,11 @@ class Department:
             WHERE id = ?
         """
 
-        CURSOR.execute(sql, (self.id,))
-        CONN.commit()
+        CURSOR.execute(sql, (self.id,));
+        CONN.commit();
+
+        # Delete the dictionary entry using id as the key
+        del type(self).all[self.id];
+
+        # Set the id to None
+        self.id = None;
